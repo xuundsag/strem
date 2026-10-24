@@ -1,0 +1,32 @@
+# Credentials. Never commit these.
+.env
+.env.local
+*.token
+Streamer.json
+
+# Saved playback positions, which are per-user data. PROGRESS_FILE defaults to
+# ./data/progress.json, so the directory goes with it.
+data/
+progress.json
+*.progress.json
+
+# Dependencies and build output.
+node_modules/
+dist/
+coverage/
+
+# Logs and temp files.
+*.log
+logs/
+tmp/
+
+# Playwright downloads its own Chromium here.
+.cache/
+test-results/
+playwright-report/
+
+# Editor and OS noise.
+.DS_Store
+*.swp
+.idea/
+.vscode/
