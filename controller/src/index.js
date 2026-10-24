@@ -858,7 +858,6 @@ async function handleStreamerModal(interaction) {
   const channelId = pendingChannels.get(interaction.user.id) || null;
   pendingChannels.delete(interaction.user.id);
   const known = new Set(parsePublicStreamers(config.publicStreamers).map((row) => row.token));
-  if (process.env.DISCORD_USER_TOKEN) known.add(process.env.DISCORD_USER_TOKEN.trim());
   if (known.has(token)) {
     return interaction.reply({ content: 'That streamer is already configured.', flags: MessageFlags.Ephemeral });
   }

@@ -39,7 +39,6 @@ async function main() {
   const pool = new StreamerPool({
     file: process.env.STREAMER_FILE || path.resolve(process.cwd(), 'Streamer.json'),
     publicSpec: process.env.PUBLIC_STREAMERS || '',
-    userToken: process.env.DISCORD_USER_TOKEN || '',
     log,
   });
   let active = null;

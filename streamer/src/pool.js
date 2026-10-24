@@ -2,27 +2,16 @@ import { DiscordStreamer } from './discord-streamer.js';
 import { StreamerStore, mergeStreamers, parsePublicStreamers, publicView, chooseAccount } from '../../shared/src/streamers.js';
 
 export class StreamerPool {
-  constructor({ file, publicSpec = '', userToken = '', log = () => {} } = {}) {
+  constructor({ file, publicSpec = '', log = () => {} } = {}) {
     this.store = new StreamerStore(file);
     this.publicSpec = publicSpec;
-    this.userToken = userToken;
     this.log = log;
     this.accounts = new Map();
     this.timer = null;
   }
 
   specs() {
-    const extras = [];
-    if (looksPresent(this.userToken)) {
-      extras.push({
-        id: 'env-user',
-        token: this.userToken.trim(),
-        channelId: null,
-        public: true,
-        userId: null,
-      });
-    }
-    return mergeStreamers(this.store.privateRows(), [...parsePublicStreamers(this.publicSpec), ...extras]);
+    return mergeStreamers(this.store.privateRows(), parsePublicStreamers(this.publicSpec));
   }
 
   async reload() {
@@ -121,8 +110,4 @@ export class StreamerPool {
     }
     this.accounts.clear();
   }
-}
-
-function looksPresent(value) {
-  return typeof value === 'string' && value.trim().length > 40;
 }

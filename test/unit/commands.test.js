@@ -6,7 +6,9 @@ test('the bot exposes stream, continue, stop and history, and nothing removed', 
   const names = buildCommands('Jinx').map((cmd) => cmd.name);
   assert.deepEqual(names, ['stream', 'continue', 'stop', 'history', 'streamer', 'help', 'ping']);
   const stream = buildCommands('Jinx')[0].toJSON();
-  assert.deepEqual(stream.options.map((o) => o.name), ['anime', 'episode', 'audio']);
+  assert.deepEqual(stream.options.map((o) => o.name), ['anime', 'audio', 'episode']);
+  const firstOptional = stream.options.findIndex((o) => !o.required);
+  assert.ok(stream.options.slice(0, firstOptional).every((o) => o.required));
   assert.equal(stream.options.find((o) => o.name === 'episode').required, false);
   assert.equal(stream.options.some((o) => o.name === 'captions' || o.name === 'animeid'), false);
   const cont = buildCommands('Jinx')[1].toJSON();

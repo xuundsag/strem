@@ -7,9 +7,6 @@ export function buildCommands(botName) {
     .addStringOption((o) =>
       o.setName('anime').setDescription('Anime name. Typos are fine, for example oni poice').setRequired(true),
     )
-    .addNumberOption((o) =>
-      o.setName('episode').setDescription('Optional. Defaults to the last watched episode, or 1. Ignored for movies').setRequired(false),
-    )
     .addStringOption((o) =>
       o
         .setName('audio')
@@ -19,6 +16,9 @@ export function buildCommands(botName) {
           { name: 'Sub (Japanese)', value: 'sub' },
           { name: 'Dub (English)', value: 'dub' },
         ),
+    )
+    .addNumberOption((o) =>
+      o.setName('episode').setDescription('Optional. Defaults to the last watched episode, or 1. Ignored for movies').setRequired(false),
     );
 
   const cont = new SlashCommandBuilder()

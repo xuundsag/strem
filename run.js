@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 const TARGETS = {
-  streamer: { script: 'streamer/src/index.js', label: 'streamer', needs: ['DISCORD_USER_TOKEN'], tokenType: 'user' },
+  streamer: { script: 'streamer/src/index.js', label: 'streamer', needs: [], tokenType: null },
   controller: { script: 'controller/src/index.js', label: 'jinx', needs: ['DISCORD_BOT_TOKEN'], tokenType: 'bot' },
 };
 
@@ -90,6 +90,10 @@ async function runCheck() {
   // be checked offline, and a typo here otherwise shows up as a confusing
   // login failure minutes later.
   for (const [name, target] of Object.entries(TARGETS)) {
+    if (!target.needs.length) {
+      say(`${name}: streaming accounts are added with /streamer, not a user token in .env`);
+      continue;
+    }
     const token = process.env[target.needs[0]] ?? env[target.needs[0]];
     if (!token || /your[-_ ]|changeme|replace/i.test(token)) continue;
     const result = await checkToken(token, target.tokenType);

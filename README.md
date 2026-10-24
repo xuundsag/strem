@@ -81,7 +81,6 @@ Then edit `.env`. The variables that matter:
 
 | Variable | What it is |
 | --- | --- |
-| `DISCORD_USER_TOKEN` | The throwaway account the streamer logs in as |
 | `DISCORD_BOT_TOKEN` | The application bot that owns `/stream` |
 | `DISCORD_CLIENT_ID` | That bot's application id, for registering the command |
 | `GUILD_ID` | Where to register the command. Leave empty for global, which takes up to an hour to appear |
@@ -367,9 +366,9 @@ Stated plainly, because a claim that was not tested is worse than no claim.
 
 ## Troubleshooting
 
-**`node run.js check` says a token is not valid.** Discord rejected it. A user
-token and a bot token are not interchangeable; `DISCORD_USER_TOKEN` takes the
-raw user token and `DISCORD_BOT_TOKEN` takes the application bot token.
+**`node run.js check` says a token is not valid.** Discord rejected `DISCORD_BOT_TOKEN`.
+Streaming accounts are not stored in `.env`. Add them with `/streamer`. Optional
+public accounts go in `PUBLIC_STREAMERS` as `token` or `token@channelId`.
 
 **The command does not appear.** With `GUILD_ID` set it appears immediately.
 Global registration takes up to an hour.
