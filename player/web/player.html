@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>player</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    cursor: none;
+  }
+  #v {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: contain;
+    background: #000;
+  }
+  video::-webkit-media-controls,
+  video::-webkit-media-controls-enclosure { display: none !important; }
+  #captions {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 4vh;
+    width: 88%;
+    text-align: center;
+    pointer-events: none;
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    font-size: 28px;
+    line-height: 1.25;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 0 4px #000, 0 2px 4px #000;
+    white-space: pre-wrap;
+  }
+  #captions.hidden { display: none; }
+</style>
+</head>
+<body>
+<video id="v" playsinline autoplay></video>
+<div id="captions" class="hidden"></div>
+<script>/*__HLSJS__*/</script>
+<script>
+(function () {
+  'use strict';
+  var video = document.getElementById('v');
+  var captionBox = document.getElementById('captions');
+  var hls = null;
+  var cues = [];
+  var captionsOn = false;
+  var audioCtx = null;
+  var gainNode = null;
+  var currentGain = 1;
+  var status = { phase: 'init', error: null, forceEnded: false, endList: false, knownDuration: 0 };
+  var endHoldSince = 0;
+  var userHold = false;
+
+  function measureFps(video, status) {
+    if (!video.requestVideoFrameCallback || status.sourceFps) return;
+    var last = 0;
+    var gaps = [];
+    var count = 0;
+    function tick(now) {
+      if (last) gaps.push(now - last);
+      last = now;
+      count += 1;
+      if (count < 8) {
+        video.requestVideoFrameCallback(tick);
+        return;
+      }
+      var avg = gaps.reduce(function (sum, gap) { return sum + gap; }, 0) / gaps.length;
+      if (avg > 8 && avg < 80) status.sourceFps = Math.round(1000 / avg);
+    }
+    video.requestVideoFrameCallback(tick);
+  }
+
+  function ensureGraph() {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return Promise.resolve();
+    if (!audioCtx) {
+      audioCtx = new Ctx();
+      var src = audioCtx.createMediaElementSource(video);
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = currentGain;
+      src.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+    }
+    video.muted = false;
+    video.volume = 1;
+    if (gainNode) gainNode.gain.value = currentGain;
+    return audioCtx.state === 'running' ? Promise.resolve() : audioCtx.resume();
+  }
+
+  window.__player = {
+    status: function () {
+      return {
+        phase: status.phase,
+        error: status.error,
+        currentTime: video.currentTime,
+        duration: Number.isFinite(video.duration) && video.duration > 0 ? video.duration : (status.knownDuration || 0),
+        paused: video.paused,
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        fps: status.sourceFps || 0,
+        ended: !!(video.ended || status.forceEnded),
+        endList: !!status.endList,
+        bufferedEnd: video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0,
+        captionsOn: captionsOn,
+        muted: video.muted,
+        gain: gainNode ? gainNode.gain.value : currentGain,
+        audioState: audioCtx ? audioCtx.state : 'none'
+      };
+    },
+    setVolume: function (level) {
+      var n = Number(level);
+      currentGain = Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : 1;
+      return ensureGraph().then(function () { return currentGain; });
+    },
+    setLoop: function (on) {
+      video.loop = !!on;
+      return video.loop;
+    },
+    load: function (opts) {
+      var url = opts.url;
+      var startAt = Number(opts.startAt) || 0;
+      status.phase = 'loading';
+      status.error = null;
+      video.muted = false;
+      video.volume = 1;
+      ensureGraph();
+      try {
+        if (window.Hls && window.Hls.isSupported()) {
+          if (hls) { try { hls.destroy(); } catch (e) {} }
+          hls = new window.Hls({ maxBufferLength: 45, maxMaxBufferLength: 90, enableWorker: true, lowLatencyMode: false });
+          hls.on(window.Hls.Events.BUFFER_EOS, function () {
+            status.phase = 'ended';
+            status.forceEnded = true;
+          });
+          hls.on(window.Hls.Events.LEVEL_LOADED, function (_evt, data) {
+            var details = data && data.details;
+            if (!details) return;
+            if (details.totalduration > 0) status.knownDuration = details.totalduration;
+            status.endList = !!details.endList;
+          });
+          hls.on(window.Hls.Events.ERROR, function (_evt, data) {
+            if (!data || !data.fatal) return;
+            status.phase = 'error';
+            status.error = data.type + ':' + (data.details || 'unknown');
+            try {
+              if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+              else if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+            } catch (e) {}
+          });
+          hls.loadSource(url);
+          hls.attachMedia(video);
+          hls.on(window.Hls.Events.MANIFEST_PARSED, function (_evt, data) {
+            var levels = (data && data.levels) || [];
+            var best = 0;
+            for (var i = 0; i < levels.length; i++) {
+              var rate = Number(levels[i].frameRate || (levels[i].attrs && levels[i].attrs['FRAME-RATE']));
+              if (rate > best && rate <= 60) best = rate;
+            }
+            if (best >= 12) status.sourceFps = Math.round(best);
+            measureFps(video, status);
+            status.phase = 'ready';
+            if (startAt > 0) { try { video.currentTime = startAt; } catch (e) {} }
+            ensureGraph().then(function () { return video.play(); }).then(function () {
+              status.phase = 'playing';
+            }).catch(function (e) {
+              status.phase = 'ready';
+              status.error = 'autoplay blocked: ' + e.message;
+            });
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = url;
+          if (startAt > 0) video.currentTime = startAt;
+          ensureGraph().then(function () { return video.play(); });
+          status.phase = 'playing';
+        } else {
+          status.phase = 'error';
+          status.error = 'no hls support in this browser';
+        }
+      } catch (e) {
+        status.phase = 'error';
+        status.error = e.message;
+      }
+    },
+    loadCaptions: function (vttText, enabled) {
+      captionsOn = enabled !== false;
+      captionBox.classList.toggle('hidden', !captionsOn);
+      cues = parseVtt(vttText || '');
+    },
+    setCaptions: function (enabled) {
+      captionsOn = !!enabled;
+      captionBox.classList.toggle('hidden', !captionsOn);
+    },
+    play: function () {
+      userHold = false;
+      return ensureGraph().then(function () { return video.play(); }).then(function () {
+        status.phase = 'playing';
+      }).catch(function (e) { status.error = e.message; });
+    },
+    pause: function () { userHold = true; video.pause(); status.phase = 'paused'; return true; },
+    seek: function (seconds) {
+      var target = Math.max(0, Number(seconds) || 0);
+      if (Number.isFinite(video.duration) && video.duration > 0) target = Math.min(target, video.duration - 0.25);
+      video.currentTime = target;
+      return target;
+    }
+  };
+
+  video.addEventListener('playing', function () {
+    if (status.forceEnded) return;
+    if (!video.paused) status.phase = 'playing';
+  });
+  video.addEventListener('pause', function () {
+    if (userHold) { status.phase = 'paused'; return; }
+    var dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : (status.knownDuration || 0);
+    if (status.endList && dur > 5 && video.currentTime >= dur - 1.5) {
+      status.phase = 'ended';
+      status.forceEnded = true;
+      return;
+    }
+    status.phase = 'paused';
+  });
+  video.addEventListener('ended', function () {
+    status.phase = 'ended';
+    status.forceEnded = true;
+  });
+  video.addEventListener('error', function () { status.phase = 'error'; status.error = 'video element error'; });
+
+  setInterval(function () {
+    if (status.forceEnded || userHold) {
+      if (userHold) endHoldSince = 0;
+      return;
+    }
+    var dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : (status.knownDuration || 0);
+    var near = status.endList && dur > 5 && video.currentTime >= dur - 0.6;
+    if (!near) { endHoldSince = 0; return; }
+    if (!endHoldSince) endHoldSince = Date.now();
+    if (Date.now() - endHoldSince >= 1500) {
+      status.phase = 'ended';
+      status.forceEnded = true;
+    }
+  }, 400);
+
+  setInterval(function () {
+    if (!captionsOn || !cues.length) { captionBox.textContent = ''; return; }
+    var t = video.currentTime;
+    var text = '';
+    for (var i = 0; i < cues.length; i++) {
+      if (t >= cues[i].start && t <= cues[i].end) { text = cues[i].text; break; }
+    }
+    if (captionBox.textContent !== text) captionBox.textContent = text;
+  }, 100);
+
+  function parseVtt(text) {
+    var out = [];
+    var blocks = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n\n');
+    for (var b = 0; b < blocks.length; b++) {
+      var lines = blocks[b].split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        var m = /(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})/.exec(lines[i]);
+        if (!m) continue;
+        var body = lines.slice(i + 1).join('\n').replace(/<[^>]+>/g, '').replace(/\{[^}]*\}/g, '').trim();
+        if (body) out.push({ start: toSec(m[1]), end: toSec(m[2]), text: body });
+        break;
+      }
+    }
+    return out;
+  }
+
+  function toSec(stamp) {
+    var p = stamp.split(':');
+    return parseFloat(p[0]) * 3600 + parseFloat(p[1]) * 60 + parseFloat(p[2]);
+  }
+
+  status.phase = 'ready-to-load';
+})();
+</script>
+</body>
+</html>

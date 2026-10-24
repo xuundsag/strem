@@ -1,0 +1,36 @@
+{
+  "name": "discord-anime-stream",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Two-part anime streaming system for Discord: a selfbot streamer and an official controller bot, talking over localhost IPC.",
+  "workspaces": [
+    "shared",
+    "player",
+    "streamer",
+    "controller"
+  ],
+  "engines": {
+    "node": ">=22.4.0"
+  },
+  "scripts": {
+    "test": "bash scripts/run-all-tests.sh",
+    "test:unit": "node --test --test-force-exit test/unit/",
+    "test:integration": "node --test --test-force-exit test/integration/",
+    "test:e2e": "node --test --test-force-exit test/e2e/",
+    "test:chaos": "node --test --test-force-exit test/chaos/",
+    "test:soak": "node --test --test-force-exit test/soak.test.js",
+    "setup": "bash scripts/setup-vps.sh",
+    "start:streamer": "node streamer/src/index.js",
+    "start:controller": "node controller/src/index.js",
+    "diagnose": "node scripts/diagnose.js"
+  },
+  "dependencies": {
+    "@dank074/discord-video-stream": "^7.0.0",
+    "@lng2004/discord.js-selfbot-v13": "^3.7.2",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.2.3",
+    "playwright": "^1.64.1",
+    "hls.js": "^1.7.3"
+  }
+}
